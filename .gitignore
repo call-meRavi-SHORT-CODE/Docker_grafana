@@ -1,0 +1,18 @@
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+
+# Environment files
+.env
+.DS_Store
+
+# FAISS index directory (if too large to commit)
+
+Rag-API/vector_data/chroma_index
+Rag-API/vector_data/faiss_index
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Virtual environment folder (if present)
+venv/

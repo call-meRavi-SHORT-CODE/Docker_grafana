@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Playground - Docker Agent{% endblock %}
+
+{% block content %}
+<div class="playground-container">
+  <form method="post" action="{{ url_for('web.generate') }}" id="playground-form">
+    <div class="playground-layout">
+      <!-- Configuration Sidebar -->
+      <aside class="config-sidebar">
+        <div class="config-section">
+          <h2><i class="fas fa-cog"></i> Configuration</h2>
+          
+          <div class="config-group">
+            <label for="framework">
+              <i class="fas fa-layer-group"></i> Framework
+            </label>
+            <select name="framework" id="framework" required>
+              {% for fw in frameworks %}
+                <option value="{{ fw }}" {% if fw == selected_fw %}selected{% endif %}>
+                  {{ fw.title() }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="config-group">
+            <label for="model">
+              <i class="fas fa-brain"></i> Model
+            </label>
+            <select name="model" id="model" required>
+              {% for m in models %}
+                <option value="{{ m }}" {% if m == selected_m %}selected{% endif %}>
+                  {{ m }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="config-group">
+            <label for="vector_store">
+              <i class="fas fa-database"></i> Vector Store
+            </label>
+            <select name="vector_store" id="vector_store" required>
+              {% for vs in vectorstores %}
+                <option value="{{ vs }}" {% if vs == selected_vs %}selected{% endif %}>
+                  {{ vs }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          {% if trace_id %}
+          <div class="trace-info">
+            <h3><i class="fas fa-route"></i> Last Execution</h3>
+            <div class="trace-details">
+              <div class="trace-item">
+                <span class="trace-label">Trace ID:</span>
+                <span class="trace-value">
+                  <a href="{{ url_for('web.trace_detail', trace_id=trace_id) }}">
+                    {{ trace_id[:8] }}...
+                  </a>
+                </span>
+              </div>
+              <div class="trace-item">
+                <span class="trace-label">Duration:</span>
+                <span class="trace-value">{{ "%.2f"|format(duration) }}s</span>
+              </div>
+              <div class="trace-item">
+                <span class="trace-label">Tokens:</span>
+                <span class="trace-value">{{ tokens_used }}</span>
+              </div>
+              <div class="trace-item">
+                <span class="trace-label">Status:</span>
+                <span class="trace-value status-{{ status }}">{{ status.title() }}</span>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </aside>
+
+      <!-- Main Content Area -->
+      <div class="playground-main">
+        <div class="io-section">
+          <div class="input-section">
+            <div class="section-header">
+              <h2><i class="fas fa-keyboard"></i> Input</h2>
+              <div class="input-actions">
+                <button type="button" class="btn-secondary" onclick="clearInput()">
+                  <i class="fas fa-trash"></i> Clear
+                </button>
+              </div>
+            </div>
+            <textarea 
+              name="prompt_text" 
+              id="prompt_text"
+              class="input-box" 
+              placeholder="Enter your Docker-related question here... (e.g., 'Show all running containers', 'Create a new container with nginx')"
+              required
+            >{{ prompt_text or '' }}</textarea>
+            
+            <div class="input-footer">
+              <button type="submit" class="btn-primary" id="submit-btn">
+                <i class="fas fa-paper-plane"></i> Execute Query
+              </button>
+              <div class="input-stats">
+                <span id="char-count">0</span> characters
+              </div>
+            </div>
+          </div>
+
+          <div class="output-section">
+            <div class="section-header">
+              <h2><i class="fas fa-terminal"></i> Response</h2>
+              {% if response %}
+              <div class="output-actions">
+                <button type="button" class="btn-secondary" onclick="copyResponse()">
+                  <i class="fas fa-copy"></i> Copy
+                </button>
+              </div>
+              {% endif %}
+            </div>
+            
+            <div class="output-box" id="output-box">
+              {% if response %}
+                <div class="response-content">
+                  <pre>{{ response }}</pre>
+                </div>
+              {% else %}
+                <div class="output-placeholder">
+                  <i class="fas fa-robot"></i>
+                  <p>No response yet. Submit a query to see results.</p>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loading-overlay">
+  <div class="loading-content">
+    <div class="spinner"></div>
+    <p>Processing your request...</p>
+    <small>This may take a few moments</small>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Character counter
+document.getElementById('prompt_text').addEventListener('input', function() {
+  const charCount = this.value.length;
+  document.getElementById('char-count').textContent = charCount;
+});
+
+// Form submission with loading
+document.getElementById('playground-form').addEventListener('submit', function() {
+  document.getElementById('loading-overlay').style.display = 'flex';
+  document.getElementById('submit-btn').disabled = true;
+});
+
+// Clear input
+function clearInput() {
+  document.getElementById('prompt_text').value = '';
+  document.getElementById('char-count').textContent = '0';
+}
+
+// Copy response
+function copyResponse() {
+  const responseText = document.querySelector('.response-content pre').textContent;
+  navigator.clipboard.writeText(responseText).then(function() {
+    // Show success feedback
+    const btn = event.target.closest('button');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+    setTimeout(() => {
+      btn.innerHTML = originalText;
+    }, 2000);
+  });
+}
+
+// Initialize character count
+document.addEventListener('DOMContentLoaded', function() {
+  const textarea = document.getElementById('prompt_text');
+  document.getElementById('char-count').textContent = textarea.value.length;
+});
+</script>
+{% endblock %}

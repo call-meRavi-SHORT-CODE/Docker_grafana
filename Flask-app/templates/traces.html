@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Traces - Docker Agent{% endblock %}
+
+{% block content %}
+<div class="traces-container">
+  <div class="traces-header">
+    <h1><i class="fas fa-route"></i> Execution Traces</h1>
+    <div class="traces-actions">
+      <button class="btn-secondary" onclick="refreshTraces()">
+        <i class="fas fa-sync-alt"></i> Refresh
+      </button>
+      <button class="btn-secondary" onclick="clearTraces()">
+        <i class="fas fa-trash"></i> Clear All
+      </button>
+    </div>
+  </div>
+
+  {% if traces %}
+  <div class="traces-grid">
+    {% for trace in traces %}
+    <div class="trace-card status-{{ trace.status }}">
+      <div class="trace-header">
+        <div class="trace-id">
+          <i class="fas fa-fingerprint"></i>
+          <a href="{{ url_for('web.trace_detail', trace_id=trace.trace_id) }}">
+            {{ trace.trace_id[:12] }}...
+          </a>
+        </div>
+        <div class="trace-status status-{{ trace.status }}">
+          {{ trace.status.title() }}
+        </div>
+      </div>
+
+      <div class="trace-info">
+        <div class="trace-row">
+          <span class="label">Framework:</span>
+          <span class="value">{{ trace.request_data.framework.title() }}</span>
+        </div>
+        <div class="trace-row">
+          <span class="label">Model:</span>
+          <span class="value">{{ trace.request_data.llm_model or trace.request_data.model }}</span>
+        </div>
+        <div class="trace-row">
+          <span class="label">Vector Store:</span>
+          <span class="value">{{ trace.request_data.vector_store }}</span>
+        </div>
+        <div class="trace-row">
+          <span class="label">Started:</span>
+          <span class="value">{{ trace.timestamp[:19].replace('T', ' ') }}</span>
+        </div>
+        {% if trace.total_duration %}
+        <div class="trace-row">
+          <span class="label">Duration:</span>
+          <span class="value">{{ "%.2f"|format(trace.total_duration) }}s</span>
+        </div>
+        {% endif %}
+        <div class="trace-row">
+          <span class="label">Steps:</span>
+          <span class="value">{{ trace.steps|length }}</span>
+        </div>
+        <div class="trace-row">
+          <span class="label">Tokens:</span>
+          <span class="value">{{ trace.metrics.tokens_used }}</span>
+        </div>
+      </div>
+
+      <div class="trace-query">
+        <strong>Query:</strong>
+        <p>{{ trace.request_data.query[:100] }}{% if trace.request_data.query|length > 100 %}...{% endif %}</p>
+      </div>
+
+      <div class="trace-actions">
+        <a href="{{ url_for('web.trace_detail', trace_id=trace.trace_id) }}" class="btn-primary btn-sm">
+          <i class="fas fa-eye"></i> View Details
+        </a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="fas fa-route"></i>
+    <h2>No Traces Yet</h2>
+    <p>Execute some queries in the playground to see traces here.</p>
+    <a href="{{ url_for('web.index') }}" class="btn-primary">
+      <i class="fas fa-play"></i> Go to Playground
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function refreshTraces() {
+  location.reload();
+}
+
+function clearTraces() {
+  if (confirm('Are you sure you want to clear all traces? This action cannot be undone.')) {
+    // This would need an API endpoint to clear traces
+    fetch('/api/traces', { method: 'DELETE' })
+      .then(() => location.reload())
+      .catch(err => console.error('Failed to clear traces:', err));
+  }
+}
+</script>
+{% endblock %}

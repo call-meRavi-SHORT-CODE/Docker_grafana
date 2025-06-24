@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Logs - Docker Agent{% endblock %}
+
+{% block content %}
+<div class="logs-container">
+  <div class="logs-header">
+    <h1><i class="fas fa-file-alt"></i> System Logs</h1>
+    <div class="logs-actions">
+      <button class="btn-secondary" onclick="refreshLogs()">
+        <i class="fas fa-sync-alt"></i> Refresh
+      </button>
+      <button class="btn-secondary" onclick="clearLogs()">
+        <i class="fas fa-trash"></i> Clear
+      </button>
+      <div class="log-filter">
+        <select id="log-level-filter" onchange="filterLogs()">
+          <option value="">All Levels</option>
+          <option value="info">Info</option>
+          <option value="warning">Warning</option>
+          <option value="error">Error</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="logs-content">
+    {% if traces %}
+    <div class="log-table">
+      <div class="log-header">
+        <div class="log-col-time">Timestamp</div>
+        <div class="log-col-level">Level</div>
+        <div class="log-col-framework">Framework</div>
+        <div class="log-col-model">Model</div>
+        <div class="log-col-status">Status</div>
+        <div class="log-col-duration">Duration</div>
+        <div class="log-col-message">Message</div>
+      </div>
+      
+      {% for trace in traces %}
+      <div class="log-row log-level-{{ trace.status }}" data-level="{{ trace.status }}">
+        <div class="log-col-time">
+          {{ trace.timestamp[:19].replace('T', ' ') }}
+        </div>
+        <div class="log-col-level">
+          <span class="log-level-badge log-level-{{ trace.status }}">
+            {% if trace.status == 'completed' %}
+              <i class="fas fa-check-circle"></i> INFO
+            {% elif trace.status == 'failed' %}
+              <i class="fas fa-exclamation-triangle"></i> ERROR
+            {% else %}
+              <i class="fas fa-info-circle"></i> INFO
+            {% endif %}
+          </span>
+        </div>
+        <div class="log-col-framework">
+          {{ trace.request_data.framework.title() }}
+        </div>
+        <div class="log-col-model">
+          {{ trace.request_data.llm_model or trace.request_data.model }}
+        </div>
+        <div class="log-col-status">
+          <span class="status-badge status-{{ trace.status }}">
+            {{ trace.status.title() }}
+          </span>
+        </div>
+        <div class="log-col-duration">
+          {% if trace.total_duration %}
+            {{ "%.2f"|format(trace.total_duration) }}s
+          {% else %}
+            -
+          {% endif %}
+        </div>
+        <div class="log-col-message">
+          <div class="log-message">
+            Query: {{ trace.request_data.query[:80] }}{% if trace.request_data.query|length > 80 %}...{% endif %}
+            {% if trace.error %}
+            <div class="log-error">Error: {{ trace.error[:100] }}{% if trace.error|length > 100 %}...{% endif %}</div>
+            {% endif %}
+          </div>
+          <div class="log-actions">
+            <a href="{{ url_for('web.trace_detail', trace_id=trace.trace_id) }}" class="log-action-link">
+              <i class="fas fa-eye"></i> View
+            </a>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <i class="fas fa-file-alt"></i>
+      <h2>No Logs Available</h2>
+      <p>Execute some queries to generate logs.</p>
+      <a href="{{ url_for('web.index') }}" class="btn-primary">
+        <i class="fas fa-play"></i> Go to Playground
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function refreshLogs() {
+  location.reload();
+}
+
+function clearLogs() {
+  if (confirm('Are you sure you want to clear all logs? This action cannot be undone.')) {
+    // This would need an API endpoint to clear logs
+    alert('Clear logs functionality would be implemented here');
+  }
+}
+
+function filterLogs() {
+  const filter = document.getElementById('log-level-filter').value;
+  const rows = document.querySelectorAll('.log-row');
+  
+  rows.forEach(row => {
+    if (!filter || row.dataset.level.includes(filter)) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
+}
+
+// Auto-refresh logs every 10 seconds
+setInterval(refreshLogs, 10000);
+</script>
+{% endblock %}

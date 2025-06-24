@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  flask-app:
+    build: .
+    ports:
+      - "5000:5000"
+      - "8001:8001"  # Prometheus metrics
+    environment:
+      - DEBUG=False
+      - RAG_API_URL=http://rag-api:8000
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+      - rag-api
+    networks:
+      - docker-agent-network
+
+  rag-api:
+    build: ../Rag-API
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    volumes:
+      - ../Rag-API/data:/app/data
+      - ../Rag-API/vector_data:/app/vector_data
+    networks:
+      - docker-agent-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - docker-agent-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    networks:
+      - docker-agent-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - docker-agent-network
+
+volumes:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  docker-agent-network:
+    driver: bridge

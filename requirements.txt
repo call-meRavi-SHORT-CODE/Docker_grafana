@@ -1,0 +1,41 @@
+langchain-community       # for WebBaseLoader, FAISS wrapper
+langchain-core                 # for prompts, chains                   # BeautifulSoup parsing
+faiss-cpu                   # vector index backend
+openai
+langchain
+langgraph
+chromadb
+docker
+tqdm
+langchain_openai
+fastapi
+uvicorn
+python-dotenv
+opentelemetry-api
+opentelemetry-sdk
+langchain-google-genai
+dspy
+llama-index-core 
+llama-index-llms-openai
+llama-index-llms-groq
+llama-index-llms-google-genai
+torch
+transformers           
+langchain-google-genai 
+google-generativeai
+# Tracing and Monitoring
+langtrace-python-sdk
+prometheus-client
+structlog
+opentelemetry-exporter-prometheus
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-requests
+opentelemetry-instrumentation-langchain
+grafana-client
+# Additional utilities
+pydantic-settings
+redis
+celery
+sqlalchemy
+alembic
+psycopg2-binary

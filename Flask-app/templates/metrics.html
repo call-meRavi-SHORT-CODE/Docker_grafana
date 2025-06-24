@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}Metrics - Docker Agent{% endblock %}
+
+{% block content %}
+<div class="metrics-container">
+  <div class="metrics-header">
+    <h1><i class="fas fa-chart-line"></i> Performance Metrics</h1>
+    <div class="metrics-actions">
+      <button class="btn-secondary" onclick="refreshMetrics()">
+        <i class="fas fa-sync-alt"></i> Refresh
+      </button>
+      <a href="http://localhost:8001/metrics" target="_blank" class="btn-secondary">
+        <i class="fas fa-external-link-alt"></i> Prometheus
+      </a>
+    </div>
+  </div>
+
+  <div class="metrics-grid">
+    <!-- Summary Cards -->
+    <div class="metric-card summary-card">
+      <div class="metric-header">
+        <h2><i class="fas fa-tachometer-alt"></i> Summary</h2>
+      </div>
+      <div class="metric-content">
+        <div class="summary-stats">
+          <div class="stat-item">
+            <div class="stat-value">{{ metrics.total_requests }}</div>
+            <div class="stat-label">Total Requests</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">{{ "%.1f"|format(metrics.success_rate) }}%</div>
+            <div class="stat-label">Success Rate</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">{{ "%.2f"|format(metrics.average_duration) }}s</div>
+            <div class="stat-label">Avg Duration</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">{{ metrics.total_tokens_used }}</div>
+            <div class="stat-label">Total Tokens</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Requests -->
+    <div class="metric-card">
+      <div class="metric-header">
+        <h2><i class="fas fa-spinner"></i> Active Requests</h2>
+      </div>
+      <div class="metric-content">
+        <div class="active-requests">
+          <div class="active-count">{{ metrics.active_requests }}</div>
+          <div class="active-label">Currently Processing</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Request Status -->
+    <div class="metric-card">
+      <div class="metric-header">
+        <h2><i class="fas fa-check-circle"></i> Request Status</h2>
+      </div>
+      <div class="metric-content">
+        <div class="status-breakdown">
+          <div class="status-item status-completed">
+            <span class="status-count">{{ metrics.completed_requests }}</span>
+            <span class="status-label">Completed</span>
+          </div>
+          <div class="status-item status-failed">
+            <span class="status-count">{{ metrics.failed_requests }}</span>
+            <span class="status-label">Failed</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Session Info -->
+    <div class="metric-card">
+      <div class="metric-header">
+        <h2><i class="fas fa-user-clock"></i> Session</h2>
+      </div>
+      <div class="metric-content">
+        <div class="session-info">
+          <div class="session-item">
+            <span class="session-label">Session ID:</span>
+            <span class="session-value">{{ metrics.session_id[:8] }}...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Configuration Usage -->
+  <div class="config-usage">
+    <div class="usage-card">
+      <h2><i class="fas fa-cogs"></i> Configuration Usage</h2>
+      <div class="usage-grid">
+        <div class="usage-section">
+          <h3>Frameworks</h3>
+          <div class="usage-list">
+            {% for framework in frameworks %}
+            <div class="usage-item">
+              <span class="usage-name">{{ framework.title() }}</span>
+              <div class="usage-bar">
+                <div class="usage-fill" style="width: {{ (loop.index * 20) % 100 }}%"></div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="usage-section">
+          <h3>Models</h3>
+          <div class="usage-list">
+            {% for model in models[:5] %}
+            <div class="usage-item">
+              <span class="usage-name">{{ model }}</span>
+              <div class="usage-bar">
+                <div class="usage-fill" style="width: {{ (loop.index * 15) % 100 }}%"></div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="usage-section">
+          <h3>Vector Stores</h3>
+          <div class="usage-list">
+            {% for vs in vectorstores %}
+            <div class="usage-item">
+              <span class="usage-name">{{ vs }}</span>
+              <div class="usage-bar">
+                <div class="usage-fill" style="width: {{ (loop.index * 30) % 100 }}%"></div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grafana Integration -->
+  <div class="grafana-section">
+    <div class="grafana-card">
+      <h2><i class="fas fa-chart-area"></i> Grafana Dashboard</h2>
+      <div class="grafana-content">
+        <p>View detailed metrics and visualizations in Grafana Cloud:</p>
+        <div class="grafana-actions">
+          <a href="#" class="btn-primary" onclick="openGrafana()">
+            <i class="fas fa-external-link-alt"></i> Open Grafana Dashboard
+          </a>
+          <button class="btn-secondary" onclick="exportMetrics()">
+            <i class="fas fa-download"></i> Export Metrics
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function refreshMetrics() {
+  location.reload();
+}
+
+function openGrafana() {
+  // This would open your Grafana Cloud dashboard
+  // Replace with your actual Grafana URL
+  const grafanaUrl = 'https://your-grafana-instance.grafana.net/d/docker-agent';
+  window.open(grafanaUrl, '_blank');
+}
+
+function exportMetrics() {
+  fetch('/api/metrics')
+    .then(response => response.json())
+    .then(data => {
+      const dataStr = JSON.stringify(data, null, 2);
+      const dataBlob = new Blob([dataStr], {type: 'application/json'});
+      
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(dataBlob);
+      link.download = `metrics_${new Date().toISOString().split('T')[0]}.json`;
+      link.click();
+    })
+    .catch(err => console.error('Failed to export metrics:', err));
+}
+
+// Auto-refresh metrics every 30 seconds
+setInterval(refreshMetrics, 30000);
+</script>
+{% endblock %}
