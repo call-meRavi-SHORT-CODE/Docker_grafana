@@ -12,7 +12,7 @@ function initializeApp() {
     // Initialize real-time updates
     initializeRealTimeUpdates();
     
-    // Initialize tooltips and interactive elements
+    // Initialize interactive elements
     initializeInteractiveElements();
     
     console.log('Docker Agent application initialized');
@@ -116,7 +116,6 @@ function updateMetricValues(metrics) {
 
 function updateTracesDisplay(traces) {
     // This would update the traces grid without full page reload
-    // Implementation depends on specific requirements
     console.log('Traces updated:', traces.length);
 }
 
@@ -135,6 +134,18 @@ function initializeInteractiveElements() {
         button.className = 'copy-button';
         button.innerHTML = '<i class="fas fa-copy"></i>';
         button.title = 'Copy to clipboard';
+        button.style.cssText = `
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        `;
         
         button.addEventListener('click', function() {
             navigator.clipboard.writeText(pre.textContent).then(() => {
@@ -231,6 +242,7 @@ document.addEventListener('submit', function(e) {
     
     if (submitButton) {
         submitButton.disabled = true;
+        const originalText = submitButton.innerHTML;
         submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
         
         // Show loading overlay if it exists
@@ -238,6 +250,15 @@ document.addEventListener('submit', function(e) {
         if (overlay) {
             overlay.style.display = 'flex';
         }
+        
+        // Reset button after 30 seconds as fallback
+        setTimeout(() => {
+            submitButton.disabled = false;
+            submitButton.innerHTML = originalText;
+            if (overlay) {
+                overlay.style.display = 'none';
+            }
+        }, 30000);
     }
 });
 
@@ -249,4 +270,18 @@ window.addEventListener('online', function() {
 
 window.addEventListener('offline', function() {
     showNotification('Connection lost. Some features may not work.', 'error');
+});
+
+// Smooth scrolling for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            target.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+        }
+    });
 });

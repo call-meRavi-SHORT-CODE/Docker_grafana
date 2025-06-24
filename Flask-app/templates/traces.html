@@ -28,45 +28,46 @@
           </a>
         </div>
         <div class="trace-status status-{{ trace.status }}">
+          <i class="fas fa-{% if trace.status == 'completed' %}check-circle{% elif trace.status == 'failed' %}times-circle{% else %}clock{% endif %}"></i>
           {{ trace.status.title() }}
         </div>
       </div>
 
       <div class="trace-info">
         <div class="trace-row">
-          <span class="label">Framework:</span>
+          <span class="label"><i class="fas fa-layer-group"></i> Framework:</span>
           <span class="value">{{ trace.request_data.framework.title() }}</span>
         </div>
         <div class="trace-row">
-          <span class="label">Model:</span>
+          <span class="label"><i class="fas fa-brain"></i> Model:</span>
           <span class="value">{{ trace.request_data.llm_model or trace.request_data.model }}</span>
         </div>
         <div class="trace-row">
-          <span class="label">Vector Store:</span>
+          <span class="label"><i class="fas fa-database"></i> Vector Store:</span>
           <span class="value">{{ trace.request_data.vector_store }}</span>
         </div>
         <div class="trace-row">
-          <span class="label">Started:</span>
+          <span class="label"><i class="fas fa-clock"></i> Started:</span>
           <span class="value">{{ trace.timestamp[:19].replace('T', ' ') }}</span>
         </div>
         {% if trace.total_duration %}
         <div class="trace-row">
-          <span class="label">Duration:</span>
+          <span class="label"><i class="fas fa-stopwatch"></i> Duration:</span>
           <span class="value">{{ "%.2f"|format(trace.total_duration) }}s</span>
         </div>
         {% endif %}
         <div class="trace-row">
-          <span class="label">Steps:</span>
+          <span class="label"><i class="fas fa-list-ol"></i> Steps:</span>
           <span class="value">{{ trace.steps|length }}</span>
         </div>
         <div class="trace-row">
-          <span class="label">Tokens:</span>
+          <span class="label"><i class="fas fa-coins"></i> Tokens:</span>
           <span class="value">{{ trace.metrics.tokens_used }}</span>
         </div>
       </div>
 
       <div class="trace-query">
-        <strong>Query:</strong>
+        <strong><i class="fas fa-question-circle"></i> Query:</strong>
         <p>{{ trace.request_data.query[:100] }}{% if trace.request_data.query|length > 100 %}...{% endif %}</p>
       </div>
 
@@ -99,11 +100,16 @@ function refreshTraces() {
 
 function clearTraces() {
   if (confirm('Are you sure you want to clear all traces? This action cannot be undone.')) {
-    // This would need an API endpoint to clear traces
     fetch('/api/traces', { method: 'DELETE' })
       .then(() => location.reload())
-      .catch(err => console.error('Failed to clear traces:', err));
+      .catch(err => {
+        console.error('Failed to clear traces:', err);
+        alert('Failed to clear traces. Please try again.');
+      });
   }
 }
+
+// Auto-refresh traces every 15 seconds
+setInterval(refreshTraces, 15000);
 </script>
 {% endblock %}

@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from services.agent_service import agent_service
+from services.metrics_service import metrics_service
 from core.tracing import tracing_manager
 import structlog
 
@@ -67,10 +68,58 @@ def get_trace(trace_id):
 def get_metrics():
     """Get metrics summary"""
     try:
-        metrics = tracing_manager.get_metrics_summary()
+        # Get time range from query params
+        days = request.args.get('days', 7, type=int)
+        
+        # Get enhanced metrics
+        metrics = metrics_service.get_enhanced_metrics(days)
         return jsonify(metrics)
     except Exception as e:
         logger.error("API metrics error", error=str(e))
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/metrics/tokens', methods=['GET'])
+def get_token_metrics():
+    """Get token usage metrics"""
+    try:
+        days = request.args.get('days', 7, type=int)
+        token_data = metrics_service.get_token_usage_data(days)
+        return jsonify(token_data)
+    except Exception as e:
+        logger.error("API token metrics error", error=str(e))
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/metrics/costs', methods=['GET'])
+def get_cost_metrics():
+    """Get cost metrics"""
+    try:
+        days = request.args.get('days', 7, type=int)
+        model = request.args.get('model', 'gpt-4o-mini')
+        cost_data = metrics_service.get_cost_data(days, model)
+        return jsonify(cost_data)
+    except Exception as e:
+        logger.error("API cost metrics error", error=str(e))
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/metrics/latency', methods=['GET'])
+def get_latency_metrics():
+    """Get latency metrics"""
+    try:
+        days = request.args.get('days', 7, type=int)
+        latency_data = metrics_service.get_latency_data(days)
+        return jsonify(latency_data)
+    except Exception as e:
+        logger.error("API latency metrics error", error=str(e))
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/metrics/models', methods=['GET'])
+def get_model_metrics():
+    """Get model usage breakdown"""
+    try:
+        model_data = metrics_service.get_model_usage_breakdown()
+        return jsonify(model_data)
+    except Exception as e:
+        logger.error("API model metrics error", error=str(e))
         return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/health', methods=['GET'])
