@@ -5,7 +5,7 @@ __pycache__/
 # Environment files
 .env
 .DS_Store
-
+Flask-app/.env.example
 # FAISS index directory (if too large to commit)
 
 Rag-API/vector_data/chroma_index
