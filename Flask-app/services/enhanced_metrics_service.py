@@ -1,44 +1,33 @@
 from typing import Dict, Any, List
 from datetime import datetime, timedelta
 import structlog
-from .metrics_collector import metrics_collector, MetricData
+from services.database import db_manager
 
 logger = structlog.get_logger()
 
 class EnhancedMetricsService:
-    """Enhanced metrics service with real-time data collection"""
+    """Enhanced metrics service with persistent database storage"""
     
     def __init__(self):
-        self.collector = metrics_collector
-    
-    def record_trace_metrics(self, trace_data: Dict[str, Any]) -> MetricData:
-        """Record metrics for a trace execution"""
-        try:
-            return self.collector.record_metrics(trace_data)
-        except Exception as e:
-            logger.error(f"Failed to record trace metrics: {e}")
-            # Return a default metric to avoid breaking the flow
-            return MetricData(
-                timestamp=datetime.now(),
-                trace_id=trace_data.get('trace_id', ''),
-                framework=trace_data.get('framework', 'unknown'),
-                model=trace_data.get('model', 'unknown'),
-                vector_store=trace_data.get('vector_store', 'unknown'),
-                input_tokens=0,
-                output_tokens=0,
-                total_tokens=0,
-                input_cost=0.0,
-                output_cost=0.0,
-                total_cost=0.0,
-                latency_ms=0.0,
-                status='failed',
-                error_message=str(e)
-            )
+        self.db = db_manager
     
     def get_real_time_metrics(self, hours: int = 24) -> Dict[str, Any]:
         """Get real-time metrics for the specified time period"""
         try:
-            return self.collector.get_real_time_metrics(hours)
+            # Get summary data
+            summary = self.db.get_metrics_summary(hours)
+            
+            # Get time series data
+            time_series = self.db.get_time_series_data(hours)
+            
+            # Get recent traces
+            recent_traces = self.db.get_recent_traces(10)
+            
+            return {
+                'summary': summary,
+                'time_series': time_series,
+                'recent_traces': recent_traces
+            }
         except Exception as e:
             logger.error(f"Failed to get real-time metrics: {e}")
             return self._get_fallback_metrics()
@@ -47,14 +36,14 @@ class EnhancedMetricsService:
         """Get enhanced metrics with backward compatibility"""
         try:
             # Get real-time data
-            real_time_data = self.collector.get_real_time_metrics(days * 24)
+            real_time_data = self.get_real_time_metrics(days * 24)
             
             # Convert to the expected format for backward compatibility
             summary = real_time_data['summary']
             time_series = real_time_data['time_series']
             
             return {
-                'session_id': 'real-time-session',
+                'session_id': 'persistent-session',
                 'total_requests': summary['total_requests'],
                 'completed_requests': summary['successful_requests'],
                 'failed_requests': summary['failed_requests'],
@@ -102,8 +91,7 @@ class EnhancedMetricsService:
     def get_token_usage_data(self, days: int = 7) -> Dict[str, Any]:
         """Get token usage data"""
         try:
-            real_time_data = self.collector.get_real_time_metrics(days * 24)
-            time_series = real_time_data['time_series']
+            time_series = self.db.get_time_series_data(days * 24)
             
             return {
                 'labels': time_series['labels'],
@@ -118,8 +106,11 @@ class EnhancedMetricsService:
     def get_cost_data(self, days: int = 7, model: str = 'gpt-4o-mini') -> Dict[str, Any]:
         """Get cost data"""
         try:
-            real_time_data = self.collector.get_real_time_metrics(days * 24)
-            time_series = real_time_data['time_series']
+            time_series = self.db.get_time_series_data(days * 24)
+            
+            # Get pricing info
+            from services.token_calculator import token_calculator
+            pricing = token_calculator.get_model_pricing(model)
             
             return {
                 'labels': time_series['labels'],
@@ -127,7 +118,7 @@ class EnhancedMetricsService:
                 'output_costs': time_series['output_costs'],
                 'total_costs': time_series['total_costs'],
                 'model': model,
-                'pricing': self.collector.token_costs.get(model, self.collector.token_costs['gpt-4o-mini'])
+                'pricing': pricing
             }
         except Exception as e:
             logger.error(f"Failed to get cost data: {e}")
@@ -139,8 +130,7 @@ class EnhancedMetricsService:
     def get_latency_data(self, days: int = 7) -> Dict[str, Any]:
         """Get latency data"""
         try:
-            real_time_data = self.collector.get_real_time_metrics(days * 24)
-            time_series = real_time_data['time_series']
+            time_series = self.db.get_time_series_data(days * 24)
             
             latencies = time_series['latencies']
             return {
@@ -155,42 +145,35 @@ class EnhancedMetricsService:
             return {'labels': [], 'latencies': [], 'avg_latency': 0, 'max_latency': 0, 'min_latency': 0}
     
     def get_model_usage_breakdown(self) -> Dict[str, Any]:
-        """Get model usage breakdown from real data"""
+        """Get model usage breakdown from database"""
         try:
-            # Get recent data for model breakdown
-            real_time_data = self.collector.get_real_time_metrics(24 * 7)  # Last 7 days
-            recent_traces = real_time_data['recent_traces']
+            # Get data from last 7 days
+            since = (datetime.now() - timedelta(days=7)).isoformat()
             
-            model_stats = {}
-            for trace in recent_traces:
-                model = trace['model']
-                if model not in model_stats:
-                    model_stats[model] = {
-                        'requests': 0,
-                        'tokens': 0,
-                        'cost': 0.0,
-                        'total_latency': 0.0,
-                        'count': 0
+            with self.db.get_connection() as conn:
+                rows = conn.execute("""
+                    SELECT 
+                        model,
+                        COUNT(*) as requests,
+                        SUM(total_tokens) as tokens,
+                        SUM(total_cost) as cost,
+                        AVG(latency_ms) as avg_latency
+                    FROM metrics 
+                    WHERE timestamp >= ?
+                    GROUP BY model
+                    ORDER BY requests DESC
+                """, (since,)).fetchall()
+                
+                model_stats = {}
+                for row in rows:
+                    model_stats[row['model']] = {
+                        'requests': row['requests'],
+                        'tokens': row['tokens'] or 0,
+                        'cost': round(row['cost'] or 0.0, 4),
+                        'avg_latency': int(row['avg_latency'] or 0)
                     }
                 
-                stats = model_stats[model]
-                stats['requests'] += 1
-                stats['tokens'] += trace['total_tokens']
-                stats['cost'] += trace['total_cost']
-                stats['total_latency'] += trace['latency_ms']
-                stats['count'] += 1
-            
-            # Calculate averages
-            for model, stats in model_stats.items():
-                if stats['count'] > 0:
-                    stats['avg_latency'] = int(stats['total_latency'] / stats['count'])
-                else:
-                    stats['avg_latency'] = 0
-                del stats['total_latency']
-                del stats['count']
-                stats['cost'] = round(stats['cost'], 4)
-            
-            return model_stats
+                return model_stats
         except Exception as e:
             logger.error(f"Failed to get model usage breakdown: {e}")
             return {}
@@ -198,7 +181,24 @@ class EnhancedMetricsService:
     def get_prometheus_metrics(self) -> str:
         """Get Prometheus formatted metrics"""
         try:
-            return self.collector.get_prometheus_metrics()
+            # This would generate Prometheus format from database
+            # For now, return basic format
+            summary = self.db.get_metrics_summary(24)
+            
+            metrics = []
+            metrics.append(f"# HELP docker_agent_total_requests Total requests processed")
+            metrics.append(f"# TYPE docker_agent_total_requests counter")
+            metrics.append(f"docker_agent_total_requests {summary.get('total_requests', 0)}")
+            
+            metrics.append(f"# HELP docker_agent_total_tokens Total tokens used")
+            metrics.append(f"# TYPE docker_agent_total_tokens counter")
+            metrics.append(f"docker_agent_total_tokens {summary.get('total_tokens', 0)}")
+            
+            metrics.append(f"# HELP docker_agent_total_cost Total cost in USD")
+            metrics.append(f"# TYPE docker_agent_total_cost counter")
+            metrics.append(f"docker_agent_total_cost {summary.get('total_cost', 0.0)}")
+            
+            return "\n".join(metrics)
         except Exception as e:
             logger.error(f"Failed to get Prometheus metrics: {e}")
             return ""
@@ -206,13 +206,13 @@ class EnhancedMetricsService:
     def cleanup_old_data(self, days: int = 30) -> int:
         """Clean up old metrics data"""
         try:
-            return self.collector.cleanup_old_metrics(days)
+            return self.db.cleanup_old_data(days)
         except Exception as e:
             logger.error(f"Failed to cleanup old data: {e}")
             return 0
     
     def _get_fallback_metrics(self) -> Dict[str, Any]:
-        """Fallback metrics when real-time collection fails"""
+        """Fallback metrics when database fails"""
         return {
             'summary': {
                 'total_requests': 0,

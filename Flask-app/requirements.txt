@@ -3,8 +3,10 @@ Flask==2.3.3
 Werkzeug==2.3.7
 
 # Database
-SQLite3  # Built into Python
 sqlite3  # Built into Python
+
+# Token counting
+tiktoken==0.5.1
 
 # Metrics and Monitoring
 prometheus-client==0.17.1
