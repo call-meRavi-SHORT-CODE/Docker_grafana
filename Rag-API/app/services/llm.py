@@ -2,9 +2,9 @@ from langchain.chat_models import init_chat_model
 
 
 from llama_index.llms.openai import OpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
+#from langchain_google_genai import ChatGoogleGenerativeAI
 
-from llama_index.llms.google_genai import GoogleGenAI
+#from llama_index.llms.google_genai import GoogleGenAI
 
 import os 
 if not os.environ.get("GROQ_API_KEY"):
@@ -17,6 +17,10 @@ from llama_index.llms.groq import Groq
 
 
 def get_llama_index_llm(model_name: str):
+
+    return "Service Not Availabe"
+
+    '''
     """
     Returns an initialized chat LLM. 
     Supported: "openai", "groq", "gemini", etc.
@@ -41,10 +45,13 @@ def get_llama_index_llm(model_name: str):
     
     elif model_name == "gemini-2.0-flash":
         # Replace "gemini-llm-name" with actual Gemini identifier
-        return GoogleGenAI("gemini-2.0-flash", model_provider="google_genai")
+        return Groq(model="gemma2-9b-it", api_key=groq_api)
+        #return GoogleGenAI("gemini-2.0-flash", model_provider="google_genai")
     
     else:
         raise ValueError(f"Unsupported LLM model: {model_name}")
+
+    '''
     
 
 
@@ -75,6 +82,7 @@ def get_llm(model_name: str):
 
     elif model_name == "gemini-2.0-flash":
         # Replace "gemini-llm-name" with actual Gemini identi
-        return ChatGoogleGenerativeAI(model="gemini-2.0-flash")
+        return init_chat_model("llama-3.3-70b-versatile", model_provider="groq")  ## 
+        #return ChatGoogleGenerativeAI(model="gemini-2.0-flash")
     else:
         raise ValueError(f"Unsupported LLM model: {model_name}")

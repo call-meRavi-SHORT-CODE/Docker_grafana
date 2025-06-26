@@ -1,0 +1,523 @@
+{% extends "base.html" %}
+
+{% block title %}Enhanced Metrics - Docker Agent{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+.real-time-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #10b981;
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.real-time-indicator .pulse {
+  width: 8px;
+  height: 8px;
+  background: white;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.metric-card.real-time {
+  border-left: 4px solid #10b981;
+}
+
+.unified-chart-container {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e5e7eb;
+  margin-bottom: 2rem;
+}
+
+.chart-controls {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  align-items: center;
+}
+
+.metric-selector {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.metric-toggle {
+  padding: 0.5rem 1rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+}
+
+.metric-toggle.active {
+  background: #6366f1;
+  color: #fff;
+  border-color: #6366f1;
+}
+
+.metric-toggle:hover:not(.active) {
+  background: #f3f4f6;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="metrics-container">
+  <div class="metrics-header">
+    <h1><i class="fas fa-chart-line"></i> Enhanced Real-Time Metrics</h1>
+    <div class="metrics-actions">
+      <span class="real-time-indicator">
+        <span class="pulse"></span>
+        Live Data
+      </span>
+      <button class="btn-secondary" onclick="refreshMetrics()">
+        <i class="fas fa-sync-alt"></i> Refresh
+      </button>
+      <a href="/api/metrics/prometheus" target="_blank" class="btn-secondary">
+        <i class="fas fa-external-link-alt"></i> Prometheus
+      </a>
+      <a href="http://localhost:3000" target="_blank" class="btn-secondary">
+        <i class="fas fa-chart-bar"></i> Grafana
+      </a>
+    </div>
+  </div>
+
+  <!-- Real-Time Summary Cards -->
+  <div class="metrics-grid">
+    <div class="metric-card real-time">
+      <div class="metric-header">
+        <h2><i class="fas fa-tachometer-alt"></i> Live Summary</h2>
+      </div>
+      <div class="metric-content">
+        <div class="summary-stats">
+          <div class="stat-item">
+            <div class="stat-value" id="rt-total-requests">{{ real_time_metrics.summary.total_requests }}</div>
+            <div class="stat-label">Total Requests</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="rt-success-rate">{{ "%.1f"|format(real_time_metrics.summary.success_rate) }}%</div>
+            <div class="stat-label">Success Rate</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="rt-avg-latency">{{ "%.0f"|format(real_time_metrics.summary.avg_latency_ms) }}ms</div>
+            <div class="stat-label">Avg Latency</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="rt-total-tokens">{{ real_time_metrics.summary.total_tokens }}</div>
+            <div class="stat-label">Total Tokens</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="metric-card real-time">
+      <div class="metric-header">
+        <h2><i class="fas fa-dollar-sign"></i> Live Costs</h2>
+      </div>
+      <div class="metric-content">
+        <div class="summary-stats">
+          <div class="stat-item">
+            <div class="stat-value" id="rt-total-cost">${{ "%.4f"|format(real_time_metrics.summary.total_cost) }}</div>
+            <div class="stat-label">Total Cost</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="rt-input-cost">${{ "%.4f"|format(real_time_metrics.summary.total_input_cost) }}</div>
+            <div class="stat-label">Input Cost</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="rt-output-cost">${{ "%.4f"|format(real_time_metrics.summary.total_output_cost) }}</div>
+            <div class="stat-label">Output Cost</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="rt-failed-requests">{{ real_time_metrics.summary.failed_requests }}</div>
+            <div class="stat-label">Failed Requests</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Unified Real-Time Chart -->
+  <div class="unified-chart-container">
+    <div class="metric-header">
+      <h2><i class="fas fa-chart-area"></i> Unified Real-Time Metrics</h2>
+    </div>
+    
+    <div class="chart-controls">
+      <div class="time-range-selector">
+        <button class="time-range-btn active" data-range="6">6 Hours</button>
+        <button class="time-range-btn" data-range="12">12 Hours</button>
+        <button class="time-range-btn" data-range="24">24 Hours</button>
+        <button class="time-range-btn" data-range="168">7 Days</button>
+      </div>
+      
+      <div class="metric-selector">
+        <button class="metric-toggle active" data-metric="tokens">Tokens</button>
+        <button class="metric-toggle active" data-metric="costs">Costs</button>
+        <button class="metric-toggle active" data-metric="latency">Latency</button>
+        <button class="metric-toggle active" data-metric="requests">Requests</button>
+      </div>
+    </div>
+    
+    <div class="chart-container">
+      <canvas id="unifiedChart" class="chart-canvas"></canvas>
+    </div>
+  </div>
+
+  <!-- Token Usage Breakdown -->
+  <div class="token-usage-grid">
+    <div class="token-card">
+      <h3>Input Tokens</h3>
+      <div class="token-value" id="input-tokens">{{ real_time_metrics.summary.total_input_tokens }}</div>
+      <div class="token-cost">${{ "%.4f"|format(real_time_metrics.summary.total_input_cost) }}</div>
+    </div>
+    <div class="token-card">
+      <h3>Output Tokens</h3>
+      <div class="token-value" id="output-tokens">{{ real_time_metrics.summary.total_output_tokens }}</div>
+      <div class="token-cost">${{ "%.4f"|format(real_time_metrics.summary.total_output_cost) }}</div>
+    </div>
+    <div class="token-card">
+      <h3>Total Tokens</h3>
+      <div class="token-value" id="total-token-usage">{{ real_time_metrics.summary.total_tokens }}</div>
+      <div class="token-cost">${{ "%.4f"|format(real_time_metrics.summary.total_cost) }}</div>
+    </div>
+  </div>
+
+  <!-- Recent Activity -->
+  {% if real_time_metrics.recent_traces %}
+  <div class="metric-card">
+    <div class="metric-header">
+      <h2><i class="fas fa-history"></i> Recent Activity</h2>
+    </div>
+    <div class="recent-activity">
+      {% for trace in real_time_metrics.recent_traces[:5] %}
+      <div class="activity-item">
+        <div class="activity-info">
+          <span class="activity-framework">{{ trace.framework.title() }}</span>
+          <span class="activity-model">{{ trace.model }}</span>
+          <span class="activity-time">{{ trace.timestamp[:19].replace('T', ' ') }}</span>
+        </div>
+        <div class="activity-metrics">
+          <span class="activity-tokens">{{ trace.total_tokens }} tokens</span>
+          <span class="activity-cost">${{ "%.4f"|format(trace.total_cost) }}</span>
+          <span class="activity-latency">{{ "%.0f"|format(trace.latency_ms) }}ms</span>
+          <span class="activity-status status-{{ trace.status }}">{{ trace.status.title() }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let unifiedChart;
+let currentTimeRange = 6; // hours
+let activeMetrics = new Set(['tokens', 'costs', 'latency', 'requests']);
+
+// Initialize charts when page loads
+document.addEventListener('DOMContentLoaded', function() {
+  initializeUnifiedChart();
+  loadRealTimeData();
+  setupControls();
+  
+  // Auto-refresh every 30 seconds
+  setInterval(refreshMetrics, 30000);
+});
+
+function initializeUnifiedChart() {
+  const ctx = document.getElementById('unifiedChart').getContext('2d');
+  
+  unifiedChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: []
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false,
+      },
+      plugins: {
+        legend: {
+          position: 'top',
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+        }
+      },
+      scales: {
+        x: {
+          display: true,
+          title: {
+            display: true,
+            text: 'Time'
+          }
+        },
+        y: {
+          type: 'linear',
+          display: true,
+          position: 'left',
+          title: {
+            display: true,
+            text: 'Primary Metrics'
+          }
+        },
+        y1: {
+          type: 'linear',
+          display: true,
+          position: 'right',
+          title: {
+            display: true,
+            text: 'Secondary Metrics'
+          },
+          grid: {
+            drawOnChartArea: false,
+          },
+        }
+      }
+    }
+  });
+}
+
+function loadRealTimeData(timeRange = 6) {
+  fetch(`/api/metrics?hours=${timeRange}`)
+    .then(response => response.json())
+    .then(data => {
+      updateUnifiedChart(data);
+      updateSummaryCards(data);
+    })
+    .catch(error => {
+      console.error('Failed to load real-time data:', error);
+    });
+}
+
+function updateUnifiedChart(data) {
+  const timeSeries = data.time_series;
+  const datasets = [];
+  
+  // Tokens dataset
+  if (activeMetrics.has('tokens')) {
+    datasets.push({
+      label: 'Total Tokens',
+      data: timeSeries.total_tokens,
+      borderColor: '#6366f1',
+      backgroundColor: 'rgba(99, 102, 241, 0.1)',
+      yAxisID: 'y',
+      tension: 0.4
+    });
+  }
+  
+  // Costs dataset
+  if (activeMetrics.has('costs')) {
+    datasets.push({
+      label: 'Total Cost ($)',
+      data: timeSeries.total_costs,
+      borderColor: '#10b981',
+      backgroundColor: 'rgba(16, 185, 129, 0.1)',
+      yAxisID: 'y1',
+      tension: 0.4
+    });
+  }
+  
+  // Latency dataset
+  if (activeMetrics.has('latency')) {
+    datasets.push({
+      label: 'Latency (ms)',
+      data: timeSeries.latencies,
+      borderColor: '#ef4444',
+      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+      yAxisID: 'y',
+      tension: 0.4
+    });
+  }
+  
+  // Requests dataset
+  if (activeMetrics.has('requests')) {
+    datasets.push({
+      label: 'Request Count',
+      data: timeSeries.request_counts,
+      borderColor: '#f59e0b',
+      backgroundColor: 'rgba(245, 158, 11, 0.1)',
+      yAxisID: 'y',
+      tension: 0.4,
+      fill: false
+    });
+  }
+  
+  unifiedChart.data.labels = timeSeries.labels;
+  unifiedChart.data.datasets = datasets;
+  unifiedChart.update();
+}
+
+function updateSummaryCards(data) {
+  const summary = data.summary;
+  
+  document.getElementById('rt-total-requests').textContent = summary.total_requests;
+  document.getElementById('rt-success-rate').textContent = summary.success_rate.toFixed(1) + '%';
+  document.getElementById('rt-avg-latency').textContent = Math.round(summary.avg_latency_ms) + 'ms';
+  document.getElementById('rt-total-tokens').textContent = summary.total_tokens.toLocaleString();
+  document.getElementById('rt-total-cost').textContent = '$' + summary.total_cost.toFixed(4);
+  document.getElementById('rt-input-cost').textContent = '$' + summary.total_input_cost.toFixed(4);
+  document.getElementById('rt-output-cost').textContent = '$' + summary.total_output_cost.toFixed(4);
+  document.getElementById('rt-failed-requests').textContent = summary.failed_requests;
+  
+  // Update token cards
+  document.getElementById('input-tokens').textContent = summary.total_input_tokens.toLocaleString();
+  document.getElementById('output-tokens').textContent = summary.total_output_tokens.toLocaleString();
+  document.getElementById('total-token-usage').textContent = summary.total_tokens.toLocaleString();
+}
+
+function setupControls() {
+  // Time range buttons
+  document.querySelectorAll('.time-range-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const range = parseInt(this.dataset.range);
+      currentTimeRange = range;
+      
+      // Update active state
+      document.querySelectorAll('.time-range-btn').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      
+      // Load new data
+      loadRealTimeData(range);
+    });
+  });
+  
+  // Metric toggle buttons
+  document.querySelectorAll('.metric-toggle').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const metric = this.dataset.metric;
+      
+      if (activeMetrics.has(metric)) {
+        activeMetrics.delete(metric);
+        this.classList.remove('active');
+      } else {
+        activeMetrics.add(metric);
+        this.classList.add('active');
+      }
+      
+      // Reload chart with current data
+      loadRealTimeData(currentTimeRange);
+    });
+  });
+}
+
+function refreshMetrics() {
+  loadRealTimeData(currentTimeRange);
+  
+  // Show refresh indicator
+  const refreshBtn = document.querySelector('.btn-secondary');
+  const originalText = refreshBtn.innerHTML;
+  refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+  
+  setTimeout(() => {
+    refreshBtn.innerHTML = originalText;
+  }, 1000);
+}
+
+// Add styles for recent activity
+const style = document.createElement('style');
+style.textContent = `
+.recent-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.activity-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: #f9fafb;
+  border-radius: 6px;
+  border-left: 3px solid #6366f1;
+}
+
+.activity-info {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.activity-framework {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.activity-model {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.activity-time {
+  color: #9ca3af;
+  font-size: 0.8rem;
+}
+
+.activity-metrics {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.activity-tokens {
+  color: #6366f1;
+  font-weight: 500;
+}
+
+.activity-cost {
+  color: #10b981;
+  font-weight: 500;
+}
+
+.activity-latency {
+  color: #ef4444;
+  font-weight: 500;
+}
+
+.activity-status {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.activity-status.status-completed {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.activity-status.status-failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+`;
+document.head.appendChild(style);
+</script>
+{% endblock %}

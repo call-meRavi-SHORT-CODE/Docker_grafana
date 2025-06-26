@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+
+{% block title %}Real-Time Dashboard - Docker Agent{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<meta http-equiv="refresh" content="30">
+<style>
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.dashboard-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid #10b981;
+}
+
+.dashboard-card.warning {
+  border-left-color: #f59e0b;
+}
+
+.dashboard-card.error {
+  border-left-color: #ef4444;
+}
+
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #10b981;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.metric-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 0.5rem;
+}
+
+.metric-label {
+  color: #6b7280;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.metric-change {
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.metric-change.positive {
+  color: #10b981;
+}
+
+.metric-change.negative {
+  color: #ef4444;
+}
+
+.mini-chart {
+  height: 60px;
+  margin-top: 1rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="metrics-container">
+  <div class="metrics-header">
+    <h1><i class="fas fa-tachometer-alt"></i> Real-Time Dashboard</h1>
+    <div class="metrics-actions">
+      <span class="live-indicator">
+        <span class="live-dot"></span>
+        Live Updates
+      </span>
+      <button class="btn-secondary" onclick="location.reload()">
+        <i class="fas fa-sync-alt"></i> Refresh
+      </button>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+    <!-- Total Requests -->
+    <div class="dashboard-card">
+      <div class="live-indicator">
+        <span class="live-dot"></span>
+        Live
+      </div>
+      <div class="metric-value">{{ metrics.summary.total_requests }}</div>
+      <div class="metric-label">Total Requests</div>
+      <div class="metric-change positive">
+        <i class="fas fa-arrow-up"></i> Active
+      </div>
+    </div>
+
+    <!-- Success Rate -->
+    <div class="dashboard-card {% if metrics.summary.success_rate < 90 %}warning{% endif %}">
+      <div class="live-indicator">
+        <span class="live-dot"></span>
+        Live
+      </div>
+      <div class="metric-value">{{ "%.1f"|format(metrics.summary.success_rate) }}%</div>
+      <div class="metric-label">Success Rate</div>
+      <div class="metric-change {% if metrics.summary.success_rate >= 95 %}positive{% else %}negative{% endif %}">
+        {% if metrics.summary.success_rate >= 95 %}
+          <i class="fas fa-check-circle"></i> Excellent
+        {% else %}
+          <i class="fas fa-exclamation-triangle"></i> Monitor
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Average Latency -->
+    <div class="dashboard-card {% if metrics.summary.avg_latency_ms > 2000 %}error{% elif metrics.summary.avg_latency_ms > 1000 %}warning{% endif %}">
+      <div class="live-indicator">
+        <span class="live-dot"></span>
+        Live
+      </div>
+      <div class="metric-value">{{ "%.0f"|format(metrics.summary.avg_latency_ms) }}ms</div>
+      <div class="metric-label">Average Latency</div>
+      <div class="metric-change {% if metrics.summary.avg_latency_ms < 1000 %}positive{% else %}negative{% endif %}">
+        {% if metrics.summary.avg_latency_ms < 1000 %}
+          <i class="fas fa-bolt"></i> Fast
+        {% else %}
+          <i class="fas fa-clock"></i> Slow
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Total Cost -->
+    <div class="dashboard-card">
+      <div class="live-indicator">
+        <span class="live-dot"></span>
+        Live
+      </div>
+      <div class="metric-value">${{ "%.4f"|format(metrics.summary.total_cost) }}</div>
+      <div class="metric-label">Total Cost</div>
+      <div class="metric-change positive">
+        <i class="fas fa-dollar-sign"></i> Tracked
+      </div>
+    </div>
+
+    <!-- Token Usage -->
+    <div class="dashboard-card">
+      <div class="live-indicator">
+        <span class="live-dot"></span>
+        Live
+      </div>
+      <div class="metric-value">{{ metrics.summary.total_tokens }}</div>
+      <div class="metric-label">Total Tokens</div>
+      <div class="metric-change positive">
+        <i class="fas fa-coins"></i> {{ metrics.summary.total_input_tokens }} in / {{ metrics.summary.total_output_tokens }} out
+      </div>
+    </div>
+
+    <!-- Failed Requests -->
+    <div class="dashboard-card {% if metrics.summary.failed_requests > 0 %}error{% endif %}">
+      <div class="live-indicator">
+        <span class="live-dot"></span>
+        Live
+      </div>
+      <div class="metric-value">{{ metrics.summary.failed_requests }}</div>
+      <div class="metric-label">Failed Requests</div>
+      <div class="metric-change {% if metrics.summary.failed_requests == 0 %}positive{% else %}negative{% endif %}">
+        {% if metrics.summary.failed_requests == 0 %}
+          <i class="fas fa-check"></i> All Good
+        {% else %}
+          <i class="fas fa-exclamation-triangle"></i> Issues
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Real-Time Chart -->
+  <div class="metric-card">
+    <div class="metric-header">
+      <h2><i class="fas fa-chart-line"></i> Real-Time Activity</h2>
+    </div>
+    <div class="chart-container">
+      <canvas id="realTimeChart" class="chart-canvas"></canvas>
+    </div>
+  </div>
+
+  <!-- Recent Traces -->
+  {% if metrics.recent_traces %}
+  <div class="metric-card">
+    <div class="metric-header">
+      <h2><i class="fas fa-history"></i> Latest Activity</h2>
+    </div>
+    <div class="log-table">
+      <div class="row header">
+        <div>Time</div>
+        <div>Framework</div>
+        <div>Model</div>
+        <div>Tokens</div>
+        <div>Cost</div>
+        <div>Status</div>
+      </div>
+      {% for trace in metrics.recent_traces[:10] %}
+      <div class="row">
+        <div>{{ trace.timestamp[-8:-3] }}</div>
+        <div>{{ trace.framework.title() }}</div>
+        <div>{{ trace.model }}</div>
+        <div>{{ trace.total_tokens }}</div>
+        <div>${{ "%.4f"|format(trace.total_cost) }}</div>
+        <div>
+          <span class="status-badge status-{{ trace.status }}">
+            {{ trace.status.title() }}
+          </span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let realTimeChart;
+
+document.addEventListener('DOMContentLoaded', function() {
+  initializeRealTimeChart();
+  loadChartData();
+});
+
+function initializeRealTimeChart() {
+  const ctx = document.getElementById('realTimeChart').getContext('2d');
+  
+  realTimeChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: {{ metrics.time_series.labels | tojson }},
+      datasets: [
+        {
+          label: 'Requests',
+          data: {{ metrics.time_series.request_counts | tojson }},
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99, 102, 241, 0.1)',
+          tension: 0.4,
+          fill: true
+        },
+        {
+          label: 'Tokens (scaled)',
+          data: {{ metrics.time_series.total_tokens | tojson }}.map(x => x / 100),
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16, 185, 129, 0.1)',
+          tension: 0.4,
+          fill: false
+        },
+        {
+          label: 'Latency (ms)',
+          data: {{ metrics.time_series.latencies | tojson }},
+          borderColor: '#ef4444',
+          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+          tension: 0.4,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Values'
+          }
+        }
+      }
+    }
+  });
+}
+
+function loadChartData() {
+  // Chart data is already loaded from the template
+  console.log('Real-time dashboard loaded');
+}
+
+// Auto-refresh page every 30 seconds
+setTimeout(() => {
+  location.reload();
+}, 30000);
+</script>
+{% endblock %}

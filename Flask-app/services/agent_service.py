@@ -2,12 +2,14 @@ from typing import Dict, Any, Optional
 from core.registry import registry
 from core.tracing import tracing_manager
 from config.settings import settings
+from .enhanced_metrics_service import enhanced_metrics_service
 import structlog
+import time
 
 logger = structlog.get_logger()
 
 class AgentService:
-    """Service for managing agent interactions with tracing"""
+    """Service for managing agent interactions with enhanced real-time metrics"""
     
     def __init__(self):
         self._initialize_components()
@@ -26,8 +28,9 @@ class AgentService:
         registry.register_framework(AutoGenAdapter)
     
     def execute_query(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a query with full tracing"""
+        """Execute a query with full tracing and real-time metrics collection"""
         trace_id = tracing_manager.start_trace(request_data)
+        start_time = time.time()
         
         try:
             # Get framework adapter
@@ -57,10 +60,13 @@ class AgentService:
             query = request_data.get('query', '')
             result = adapter.execute_query(agent, query)
             
+            end_time = time.time()
+            duration = end_time - start_time
+            
             tracing_manager.add_step(trace_id, 'query_execution', {
                 'query_length': len(query),
                 'response_length': len(result.get('answer', '')),
-                'duration': result.get('duration', 0),
+                'duration': result.get('duration', duration),
                 'tokens': result.get('tokens_used', 0),
                 'status': result.get('status', 'unknown')
             })
@@ -68,15 +74,42 @@ class AgentService:
             # Clean response
             cleaned_response = self._clean_response(result.get('answer', ''))
             
+            # Prepare metrics data for collection
+            metrics_data = {
+                'trace_id': trace_id,
+                'framework': framework_name,
+                'model': request_data.get('model'),
+                'vector_store': request_data.get('vector_store'),
+                'query': query,
+                'response': cleaned_response,
+                'duration': duration,
+                'tokens_used': result.get('tokens_used', 0),
+                'input_tokens': result.get('input_tokens'),
+                'output_tokens': result.get('output_tokens'),
+                'status': 'completed'
+            }
+            
+            # Record real-time metrics
+            try:
+                metric_record = enhanced_metrics_service.record_trace_metrics(metrics_data)
+                logger.info(
+                    "Metrics recorded successfully",
+                    trace_id=trace_id,
+                    tokens=metric_record.total_tokens,
+                    cost=metric_record.total_cost
+                )
+            except Exception as e:
+                logger.error(f"Failed to record metrics: {e}", trace_id=trace_id)
+            
             final_result = {
                 'answer': cleaned_response,
                 'trace_id': trace_id,
                 'framework': framework_name,
                 'model': request_data.get('model'),
                 'vector_store': request_data.get('vector_store'),
-                'duration': result.get('duration', 0),
+                'duration': duration,
                 'tokens_used': result.get('tokens_used', 0),
-                'status': result.get('status', 'success')
+                'status': 'success'
             }
             
             tracing_manager.end_trace(trace_id, 'completed')
@@ -85,12 +118,34 @@ class AgentService:
                 "Query executed successfully",
                 trace_id=trace_id,
                 framework=framework_name,
-                duration=result.get('duration', 0)
+                duration=duration
             )
             
             return final_result
             
         except Exception as e:
+            end_time = time.time()
+            duration = end_time - start_time
+            
+            # Record failed metrics
+            metrics_data = {
+                'trace_id': trace_id,
+                'framework': request_data.get('framework', 'unknown'),
+                'model': request_data.get('model', 'unknown'),
+                'vector_store': request_data.get('vector_store', 'unknown'),
+                'query': request_data.get('query', ''),
+                'response': '',
+                'duration': duration,
+                'tokens_used': 0,
+                'status': 'failed',
+                'error': str(e)
+            }
+            
+            try:
+                enhanced_metrics_service.record_trace_metrics(metrics_data)
+            except Exception as metrics_error:
+                logger.error(f"Failed to record error metrics: {metrics_error}")
+            
             tracing_manager.end_trace(trace_id, 'failed', str(e))
             
             logger.error(
@@ -106,7 +161,7 @@ class AgentService:
                 'framework': request_data.get('framework'),
                 'model': request_data.get('model'),
                 'vector_store': request_data.get('vector_store'),
-                'duration': 0,
+                'duration': duration,
                 'tokens_used': 0,
                 'status': 'error',
                 'error': str(e)

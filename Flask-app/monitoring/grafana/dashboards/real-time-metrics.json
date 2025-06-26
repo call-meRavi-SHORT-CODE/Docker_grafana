@@ -1,0 +1,151 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Docker Agent Real-Time Metrics",
+    "tags": ["docker-agent", "real-time"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Rate (Real-Time)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(llm_requests_total[1m])",
+            "legendFormat": "Requests/min"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 10},
+                {"color": "red", "value": 50}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Token Usage Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(llm_tokens_total[1m])",
+            "legendFormat": "Tokens/min"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Cost Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(llm_cost_total[1m])",
+            "legendFormat": "$/min"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Average Latency",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(llm_latency_seconds_bucket[1m]))",
+            "legendFormat": "P50 Latency"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 5,
+        "title": "Request Volume Over Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(llm_requests_total[1m])",
+            "legendFormat": "{{framework}} - {{model}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+      },
+      {
+        "id": 6,
+        "title": "Token Usage Over Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(llm_tokens_total{token_type=\"input\"}[1m])",
+            "legendFormat": "Input Tokens - {{model}}"
+          },
+          {
+            "expr": "rate(llm_tokens_total{token_type=\"output\"}[1m])",
+            "legendFormat": "Output Tokens - {{model}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+      },
+      {
+        "id": 7,
+        "title": "Cost Breakdown",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(llm_cost_total{cost_type=\"input\"}[1m])",
+            "legendFormat": "Input Cost - {{model}}"
+          },
+          {
+            "expr": "rate(llm_cost_total{cost_type=\"output\"}[1m])",
+            "legendFormat": "Output Cost - {{model}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12}
+      },
+      {
+        "id": 8,
+        "title": "Latency Distribution",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(llm_latency_seconds_bucket[1m]))",
+            "legendFormat": "P50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(llm_latency_seconds_bucket[1m]))",
+            "legendFormat": "P95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(llm_latency_seconds_bucket[1m]))",
+            "legendFormat": "P99"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12}
+      },
+      {
+        "id": 9,
+        "title": "Error Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(llm_requests_total{status=\"failed\"}[1m]) / rate(llm_requests_total[1m]) * 100",
+            "legendFormat": "Error Rate %"
+          }
+        ],
+        "gridPos": {"h": 6, "w": 24, "x": 0, "y": 20}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "5s"
+  }
+}

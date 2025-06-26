@@ -1,0 +1,58 @@
+# Core Flask dependencies
+Flask==2.3.3
+Werkzeug==2.3.7
+
+# Database
+SQLite3  # Built into Python
+sqlite3  # Built into Python
+
+# Metrics and Monitoring
+prometheus-client==0.17.1
+structlog==23.1.0
+
+# Tracing
+langtrace-python-sdk==2.1.0
+opentelemetry-api==1.20.0
+opentelemetry-sdk==1.20.0
+opentelemetry-exporter-prometheus==1.12.0rc1
+opentelemetry-instrumentation-fastapi==0.41b0
+opentelemetry-instrumentation-requests==0.41b0
+
+# HTTP requests
+requests==2.31.0
+
+# Configuration
+pydantic-settings==2.0.3
+python-dotenv==1.0.0
+
+# Utilities
+typing-extensions==4.8.0
+
+# Existing dependencies
+langchain-community
+langchain-core
+faiss-cpu
+openai
+langchain
+langgraph
+chromadb
+docker
+tqdm
+langchain_openai
+fastapi
+uvicorn
+langchain-google-genai
+dspy
+llama-index-core 
+llama-index-llms-openai
+llama-index-llms-groq
+llama-index-llms-google-genai
+torch
+transformers           
+google-generativeai
+grafana-client
+redis
+celery
+sqlalchemy
+alembic
+psycopg2-binary
