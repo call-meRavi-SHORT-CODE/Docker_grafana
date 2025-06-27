@@ -1,9 +1,9 @@
 from typing import Dict, Any, Optional
-from core.registry import registry
 from core.tracing import tracing_manager
 from config.settings import settings
 from .enhanced_metrics_service import enhanced_metrics_service
 from .token_calculator import token_calculator
+from .framework_manager import framework_manager
 import structlog
 import time
 import re
@@ -14,20 +14,7 @@ class AgentService:
     """Service for managing agent interactions with enhanced persistent storage"""
     
     def __init__(self):
-        self._initialize_components()
-    
-    def _initialize_components(self):
-        """Initialize and register all components"""
-        # Import and register adapters
-        from adapters import (
-            LangGraphAdapter, LlamaIndexAdapter, 
-            DSPyAdapter, AutoGenAdapter
-        )
-        
-        registry.register_framework(LangGraphAdapter)
-        registry.register_framework(LlamaIndexAdapter)
-        registry.register_framework(DSPyAdapter)
-        registry.register_framework(AutoGenAdapter)
+        self.framework_manager = framework_manager
     
     def execute_query(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a query with full tracing and persistent metrics collection"""
@@ -35,32 +22,19 @@ class AgentService:
         start_time = time.time()
         
         try:
-            # Get framework adapter
             framework_name = request_data.get('framework', '').lower()
-            adapter = registry.get_framework(framework_name)
+            model = request_data.get('model', 'gpt-4o-mini')
+            vector_store = request_data.get('vector_store', 'faiss')
+            query = request_data.get('query', '')
             
             tracing_manager.add_step(trace_id, 'framework_initialization', {
                 'framework': framework_name,
-                'adapter_class': adapter.__class__.__name__
+                'model': model,
+                'vector_store': vector_store
             })
             
-            # Create agent
-            agent_config = {
-                'model': request_data.get('model'),
-                'vector_store': request_data.get('vector_store'),
-                'query': request_data.get('query')
-            }
-            
-            agent = adapter.create_agent(agent_config)
-            
-            tracing_manager.add_step(trace_id, 'agent_creation', {
-                'config': agent_config,
-                'agent_type': type(agent).__name__
-            })
-            
-            # Execute query
-            query = request_data.get('query', '')
-            result = adapter.execute_query(agent, query)
+            # Execute query using framework manager
+            result = self.framework_manager.execute_query(framework_name, query)
             
             end_time = time.time()
             duration = end_time - start_time
@@ -73,7 +47,6 @@ class AgentService:
             actual_input_tokens, actual_output_tokens = token_calculator.extract_tokens_from_response(raw_response)
             
             # Calculate accurate tokens and costs
-            model = request_data.get('model', 'gpt-4o-mini')
             token_data = token_calculator.calculate_tokens_and_cost(
                 query=query,
                 response=cleaned_response,
@@ -92,7 +65,7 @@ class AgentService:
                 'input_cost': token_data['input_cost'],
                 'output_cost': token_data['output_cost'],
                 'total_cost': token_data['total_cost'],
-                'status': 'completed'
+                'status': result.get('status', 'completed')
             })
             
             final_result = {
@@ -100,7 +73,7 @@ class AgentService:
                 'trace_id': trace_id,
                 'framework': framework_name,
                 'model': model,
-                'vector_store': request_data.get('vector_store'),
+                'vector_store': vector_store,
                 'duration': duration,
                 'input_tokens': token_data['input_tokens'],
                 'output_tokens': token_data['output_tokens'],
@@ -108,11 +81,11 @@ class AgentService:
                 'input_cost': token_data['input_cost'],
                 'output_cost': token_data['output_cost'],
                 'total_cost': token_data['total_cost'],
-                'status': 'success'
+                'status': result.get('status', 'success')
             }
             
             # End trace with response and token data
-            tracing_manager.end_trace(trace_id, 'completed', cleaned_response)
+            tracing_manager.end_trace(trace_id, result.get('status', 'completed'), cleaned_response)
             
             logger.info(
                 "Query executed successfully",
@@ -197,11 +170,18 @@ class AgentService:
     
     def get_available_configurations(self) -> Dict[str, Any]:
         """Get all available configurations"""
+        # Get available frameworks from framework manager
+        available_frameworks = list(self.framework_manager.get_available_frameworks().keys())
+        
         return {
-            'frameworks': registry.get_available_frameworks(),
+            'frameworks': available_frameworks,
             'models': settings.MODELS,
             'vector_stores': settings.VECTORSTORES
         }
+    
+    def get_framework_health(self) -> Dict[str, Any]:
+        """Get health status of all frameworks"""
+        return self.framework_manager.health_check()
 
 # Global service instance
 agent_service = AgentService()

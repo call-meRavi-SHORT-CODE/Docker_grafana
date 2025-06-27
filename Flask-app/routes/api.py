@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from services.agent_service import agent_service
 from services.enhanced_metrics_service import enhanced_metrics_service
+from services.framework_manager import framework_manager
 from core.tracing import tracing_manager
 import structlog
 
@@ -40,6 +41,27 @@ def get_configurations():
         return jsonify(configs)
     except Exception as e:
         logger.error("API configurations error", error=str(e))
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/frameworks/health', methods=['GET'])
+def get_framework_health():
+    """Get framework health status"""
+    try:
+        health = agent_service.get_framework_health()
+        return jsonify(health)
+    except Exception as e:
+        logger.error("API framework health error", error=str(e))
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/frameworks/test/<framework_name>', methods=['POST'])
+def test_framework(framework_name):
+    """Test a specific framework"""
+    try:
+        test_query = request.json.get('query', 'docker version')
+        result = framework_manager.execute_query(framework_name, test_query)
+        return jsonify(result)
+    except Exception as e:
+        logger.error("API framework test error", error=str(e), framework=framework_name)
         return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/traces', methods=['GET'])
@@ -133,6 +155,16 @@ def get_model_metrics():
         logger.error("API model metrics error", error=str(e))
         return jsonify({'error': str(e)}), 500
 
+@api_bp.route('/metrics/frameworks', methods=['GET'])
+def get_framework_metrics():
+    """Get framework usage breakdown"""
+    try:
+        framework_data = enhanced_metrics_service.get_framework_usage_breakdown()
+        return jsonify(framework_data)
+    except Exception as e:
+        logger.error("API framework metrics error", error=str(e))
+        return jsonify({'error': str(e)}), 500
+
 @api_bp.route('/metrics/prometheus', methods=['GET'])
 def get_prometheus_metrics():
     """Get Prometheus formatted metrics"""
@@ -157,4 +189,27 @@ def cleanup_metrics():
 @api_bp.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
-    return jsonify({'status': 'healthy', 'service': 'docker-agent-flask'})
+    try:
+        # Check framework health
+        framework_health = framework_manager.health_check()
+        
+        # Count healthy frameworks
+        healthy_count = sum(1 for h in framework_health.values() if h.get('status') == 'healthy')
+        total_count = len(framework_health)
+        
+        return jsonify({
+            'status': 'healthy',
+            'service': 'docker-agent-flask',
+            'frameworks': {
+                'healthy': healthy_count,
+                'total': total_count,
+                'details': framework_health
+            }
+        })
+    except Exception as e:
+        logger.error("API health check error", error=str(e))
+        return jsonify({
+            'status': 'unhealthy',
+            'service': 'docker-agent-flask',
+            'error': str(e)
+        }), 500

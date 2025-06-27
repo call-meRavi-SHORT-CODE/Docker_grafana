@@ -82,12 +82,26 @@ class DatabaseManager:
                 )
             """)
             
+            # Framework health table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS framework_health (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    framework_name TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    last_check TEXT NOT NULL,
+                    error_message TEXT,
+                    test_passed BOOLEAN DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
             # Create indexes for better performance
             conn.execute("CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON traces(timestamp)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_traces_status ON traces(status)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_traces_framework ON traces(framework)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_metrics_timestamp ON metrics(timestamp)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_metrics_trace_id ON metrics(trace_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_framework_health_name ON framework_health(framework_name)")
             
             conn.commit()
             logger.info("Database initialized successfully")
@@ -225,6 +239,29 @@ class DatabaseManager:
                     return True
             except Exception as e:
                 logger.error(f"Failed to save metrics: {e}")
+                return False
+    
+    def save_framework_health(self, health_data: Dict[str, Any]) -> bool:
+        """Save framework health data"""
+        with self.lock:
+            try:
+                with self.get_connection() as conn:
+                    for framework_name, health_info in health_data.items():
+                        conn.execute("""
+                            INSERT INTO framework_health (
+                                framework_name, status, last_check, error_message, test_passed
+                            ) VALUES (?, ?, ?, ?, ?)
+                        """, (
+                            framework_name,
+                            health_info.get('status', 'unknown'),
+                            datetime.now().isoformat(),
+                            health_info.get('error'),
+                            health_info.get('test_passed', False)
+                        ))
+                    conn.commit()
+                    return True
+            except Exception as e:
+                logger.error(f"Failed to save framework health: {e}")
                 return False
     
     def get_traces(self, limit: int = 100, status: str = None) -> List[Dict[str, Any]]:
@@ -413,6 +450,37 @@ class DatabaseManager:
             logger.error(f"Failed to get recent traces: {e}")
             return []
     
+    def get_framework_health_history(self, hours: int = 24) -> Dict[str, Any]:
+        """Get framework health history"""
+        try:
+            since = (datetime.now() - timedelta(hours=hours)).isoformat()
+            
+            with self.get_connection() as conn:
+                rows = conn.execute("""
+                    SELECT framework_name, status, last_check, test_passed, error_message
+                    FROM framework_health 
+                    WHERE last_check >= ?
+                    ORDER BY last_check DESC
+                """, (since,)).fetchall()
+                
+                health_data = {}
+                for row in rows:
+                    framework = row['framework_name']
+                    if framework not in health_data:
+                        health_data[framework] = []
+                    
+                    health_data[framework].append({
+                        'status': row['status'],
+                        'timestamp': row['last_check'],
+                        'test_passed': bool(row['test_passed']),
+                        'error': row['error_message']
+                    })
+                
+                return health_data
+        except Exception as e:
+            logger.error(f"Failed to get framework health history: {e}")
+            return {}
+    
     def cleanup_old_data(self, days: int = 30) -> int:
         """Clean up old data"""
         try:
@@ -433,10 +501,17 @@ class DatabaseManager:
                 )
                 traces_deleted = cursor.rowcount
                 
+                # Delete old framework health
+                cursor = conn.execute(
+                    "DELETE FROM framework_health WHERE last_check < ?",
+                    (cutoff,)
+                )
+                health_deleted = cursor.rowcount
+                
                 conn.commit()
                 
-                total_deleted = metrics_deleted + traces_deleted
-                logger.info(f"Cleaned up {total_deleted} old records ({metrics_deleted} metrics, {traces_deleted} traces)")
+                total_deleted = metrics_deleted + traces_deleted + health_deleted
+                logger.info(f"Cleaned up {total_deleted} old records")
                 return total_deleted
         except Exception as e:
             logger.error(f"Failed to cleanup old data: {e}")

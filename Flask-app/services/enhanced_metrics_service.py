@@ -23,10 +23,14 @@ class EnhancedMetricsService:
             # Get recent traces
             recent_traces = self.db.get_recent_traces(10)
             
+            # Get framework health
+            framework_health = self.db.get_framework_health_history(hours)
+            
             return {
                 'summary': summary,
                 'time_series': time_series,
-                'recent_traces': recent_traces
+                'recent_traces': recent_traces,
+                'framework_health': framework_health
             }
         except Exception as e:
             logger.error(f"Failed to get real-time metrics: {e}")
@@ -178,6 +182,46 @@ class EnhancedMetricsService:
             logger.error(f"Failed to get model usage breakdown: {e}")
             return {}
     
+    def get_framework_usage_breakdown(self) -> Dict[str, Any]:
+        """Get framework usage breakdown from database"""
+        try:
+            # Get data from last 7 days
+            since = (datetime.now() - timedelta(days=7)).isoformat()
+            
+            with self.db.get_connection() as conn:
+                rows = conn.execute("""
+                    SELECT 
+                        framework,
+                        COUNT(*) as requests,
+                        SUM(total_tokens) as tokens,
+                        SUM(total_cost) as cost,
+                        AVG(latency_ms) as avg_latency,
+                        COUNT(CASE WHEN status = 'completed' THEN 1 END) as successful_requests,
+                        COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_requests
+                    FROM metrics 
+                    WHERE timestamp >= ?
+                    GROUP BY framework
+                    ORDER BY requests DESC
+                """, (since,)).fetchall()
+                
+                framework_stats = {}
+                for row in rows:
+                    success_rate = (row['successful_requests'] / row['requests'] * 100) if row['requests'] > 0 else 0
+                    framework_stats[row['framework']] = {
+                        'requests': row['requests'],
+                        'tokens': row['tokens'] or 0,
+                        'cost': round(row['cost'] or 0.0, 4),
+                        'avg_latency': int(row['avg_latency'] or 0),
+                        'success_rate': round(success_rate, 1),
+                        'successful_requests': row['successful_requests'],
+                        'failed_requests': row['failed_requests']
+                    }
+                
+                return framework_stats
+        except Exception as e:
+            logger.error(f"Failed to get framework usage breakdown: {e}")
+            return {}
+    
     def get_prometheus_metrics(self) -> str:
         """Get Prometheus formatted metrics"""
         try:
@@ -197,6 +241,14 @@ class EnhancedMetricsService:
             metrics.append(f"# HELP docker_agent_total_cost Total cost in USD")
             metrics.append(f"# TYPE docker_agent_total_cost counter")
             metrics.append(f"docker_agent_total_cost {summary.get('total_cost', 0.0)}")
+            
+            metrics.append(f"# HELP docker_agent_success_rate Success rate percentage")
+            metrics.append(f"# TYPE docker_agent_success_rate gauge")
+            metrics.append(f"docker_agent_success_rate {summary.get('success_rate', 0.0)}")
+            
+            metrics.append(f"# HELP docker_agent_avg_latency Average latency in milliseconds")
+            metrics.append(f"# TYPE docker_agent_avg_latency gauge")
+            metrics.append(f"docker_agent_avg_latency {summary.get('avg_latency_ms', 0.0)}")
             
             return "\n".join(metrics)
         except Exception as e:
@@ -238,7 +290,8 @@ class EnhancedMetricsService:
                 'latencies': [],
                 'request_counts': []
             },
-            'recent_traces': []
+            'recent_traces': [],
+            'framework_health': {}
         }
     
     def _get_fallback_enhanced_metrics(self, days: int) -> Dict[str, Any]:
